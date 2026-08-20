@@ -2,14 +2,22 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>JS テトリス</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>JS テトリス (スマホ対応)</title>
   <style>
+    * {
+      touch-action: manipulation; /* スマホでのダブルタップ拡大防止 */
+      user-select: none;          /* 長押しでのテキスト選択防止 */
+      -webkit-user-select: none;
+    }
     body {
       background: #202028;
       color: #fff;
       font-family: sans-serif;
       text-align: center;
-      margin-top: 20px;
+      margin: 0;
+      padding-top: 10px;
+      overflow: hidden; /* 画面の不要なスクロールを防ぐ */
     }
     #score {
       font-size: 24px;
@@ -18,6 +26,18 @@
     canvas {
       border: solid 2px #fff;
       background-color: #000;
+      max-width: 90vw;
+      max-height: 70vh;
+      width: auto;
+      height: auto;
+      touch-action: none; /* スマホでのスワイプによるスクロール防止 */
+    }
+    #instructions {
+      margin-top: 10px;
+      font-size: 13px;
+      color: #ccc;
+      line-height: 1.4;
+      padding: 0 10px;
     }
   </style>
 </head>
@@ -25,6 +45,12 @@
 
   <div id="score">SCORE: 0</div>
   <canvas id="tetris" width="240" height="400"></canvas>
+  <div id="instructions">
+    【タップ操作】<br>
+    ブロック上: 回転 | 左側: 左移動 | 右側: 右移動<br>
+    【PCキーボード】<br>
+    ←/→: 移動 | ↑: 回転 | ↓: 落下 | スペース: ハードドロップ
+  </div>
 
   <script>
     const canvas = document.getElementById('tetris');
@@ -166,7 +192,7 @@
       updateScore();
     }
 
-    // 落下処理
+    // 通常落下処理
     function playerDrop() {
       player.pos.y++;
       if (collide(arena, player)) {
@@ -175,6 +201,18 @@
         playerReset();
         arenaSweep();
       }
+      dropCounter = 0;
+    }
+
+    // ハードドロップ処理
+    function playerHardDrop() {
+      while (!collide(arena, player)) {
+        player.pos.y++;
+      }
+      player.pos.y--;
+      merge(arena, player);
+      playerReset();
+      arenaSweep();
       dropCounter = 0;
     }
 
@@ -191,7 +229,6 @@
       const pos = player.pos.x;
       let offset = 1;
       rotate(player.matrix, dir);
-      // 壁に埋まった場合の補正（めり込み防止）
       while (collide(arena, player)) {
         player.pos.x += offset;
         offset = -(offset + (offset > 0 ? 1 : -1));
@@ -234,7 +271,7 @@
     }
 
     let dropCounter = 0;
-    let dropInterval = 1000; // 1秒ごとに1段落下
+    let dropInterval = 1000;
     let lastTime = 0;
 
     // ゲームループ
@@ -251,9 +288,55 @@
       requestAnimationFrame(update);
     }
 
-    // キーボード操作設定
+    // 画面タップ・クリックの判定処理
+    function handlePointer(event) {
+      event.preventDefault();
+
+      const rect = canvas.getBoundingClientRect();
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX;
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY;
+
+      // キャンバス上の座標を取得 (0 〜 12 / 0 〜 20)
+      const touchX = (clientX - rect.left) / rect.width * 12;
+      const touchY = (clientY - rect.top) / rect.height * 20;
+
+      // 現在のブロックの範囲（左端と右端の列）を特定
+      const matrix = player.matrix;
+      let minX = matrix[0].length;
+      let maxX = -1;
+
+      for (let y = 0; y < matrix.length; ++y) {
+        for (let x = 0; x < matrix[y].length; ++x) {
+          if (matrix[y][x] !== 0) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+          }
+        }
+      }
+
+      const pieceLeft = player.pos.x + minX;
+      const pieceRight = player.pos.x + maxX + 1;
+
+      // タップ位置に応じた操作
+      if (touchX >= pieceLeft && touchX <= pieceRight) {
+        // ブロック上をタップ: 回転
+        playerRotate(1);
+      } else if (touchX < pieceLeft) {
+        // ブロックより左側をタップ: 左移動
+        playerMove(-1);
+      } else if (touchX > pieceRight) {
+        // ブロックより右側をタップ: 右移動
+        playerMove(1);
+      }
+    }
+
+    // タッチおよびマウスクリックのイベントを登録
+    canvas.addEventListener('touchstart', handlePointer, { passive: false });
+    canvas.addEventListener('mousedown', handlePointer);
+
+    // PCキーボード操作設定
     document.addEventListener('keydown', event => {
-      if (event.keyCode === 37) {      // 左キー
+      if (event.keyCode === 37) {        // 左キー
         playerMove(-1);
       } else if (event.keyCode === 39) { // 右キー
         playerMove(1);
@@ -261,6 +344,9 @@
         playerDrop();
       } else if (event.keyCode === 38) { // 上キー
         playerRotate(1);
+      } else if (event.keyCode === 32) { // スペースキー
+        event.preventDefault();
+        playerHardDrop();
       }
     });
 
