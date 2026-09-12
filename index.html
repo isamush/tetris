@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>JS テトリス (音・スマホ対応)</title>
+  <title>JS テトリス (消去エフェクト付き)</title>
   <style>
     * {
       touch-action: manipulation;
@@ -19,7 +19,6 @@
       padding-top: 10px;
       overflow: hidden;
     }
-    /* 音声トグルスイッチのスタイル */
     .sound-control {
       display: flex;
       align-items: center;
@@ -88,7 +87,6 @@
 </head>
 <body>
 
-  <!-- 音声トグルスイッチ -->
   <div class="sound-control">
     <span>SOUND</span>
     <label class="switch">
@@ -111,7 +109,6 @@
     const context = canvas.getContext('2d');
     context.scale(20, 20);
 
-    // Web Audio API の初期化
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     let audioCtx = null;
 
@@ -124,10 +121,9 @@
       }
     }
 
-    // ブロック消去時の効果音再生（ファミコン風ピコピコ音）
     function playClearSound() {
       const soundToggle = document.getElementById('soundToggle');
-      if (!soundToggle.checked) return; // スイッチがOFFなら鳴らさない
+      if (!soundToggle.checked) return;
 
       initAudio();
       if (!audioCtx) return;
@@ -135,14 +131,11 @@
       const osc = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
 
-      osc.type = 'square'; // 矩形波（レトロゲーム風の音）
-      
-      // 高音の短いサウンド (880Hz -> 1760Hz)
+      osc.type = 'square';
       const now = audioCtx.currentTime;
       osc.frequency.setValueAtTime(880, now);
       osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
 
-      // フェードアウト処理
       gain.gain.setValueAtTime(0.15, now);
       gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
 
@@ -153,12 +146,12 @@
       osc.stop(now + 0.12);
     }
 
-    // テトリミノの形状定義
     const PIECES = 'TJLOSZI';
     const COLORS = [
       null,
       '#FF0D72', '#0DC2FF', '#0DFF72',
-      '#F538FF', '#FF8E0D', '#FFE138', '#3877FF'
+      '#F538FF', '#FF8E0D', '#FFE138', '#3877FF',
+      '#FFFFFF' // 8: 発光用（白）
     ];
 
     function createPiece(type) {
@@ -223,6 +216,8 @@
       score: 0,
     };
 
+    let isAnimating = false; // エフェクト演出中フラグ
+
     function collide(arena, player) {
       const [m, o] = [player.matrix, player.pos];
       for (let y = 0; y < m.length; ++y) {
@@ -241,7 +236,9 @@
       context.fillRect(0, 0, canvas.width, canvas.height);
 
       drawMatrix(arena, {x: 0, y: 0});
-      drawMatrix(player.matrix, player.pos);
+      if (player.matrix) {
+        drawMatrix(player.matrix, player.pos);
+      }
     }
 
     function drawMatrix(matrix, offset) {
@@ -265,56 +262,83 @@
       });
     }
 
-    // ライン消去判定
+    // ライン消去判定 & 光るフラッシュアニメーション処理
     function arenaSweep() {
-      let rowCount = 1;
-      let cleared = false;
-      outer: for (let y = arena.length - 1; y >= 0; --y) {
+      const fullRows = [];
+      for (let y = arena.length - 1; y >= 0; --y) {
+        let isFull = true;
         for (let x = 0; x < arena[y].length; ++x) {
           if (arena[y][x] === 0) {
-            continue outer;
+            isFull = false;
+            break;
           }
         }
-        const row = arena.splice(y, 1)[0].fill(0);
-        arena.unshift(row);
-        ++y;
-
-        player.score += rowCount * 10;
-        rowCount *= 2;
-        cleared = true;
+        if (isFull) {
+          fullRows.push(y);
+        }
       }
 
-      // ラインが1個以上消えたら効果音を鳴らす
-      if (cleared) {
-        playClearSound();
+      if (fullRows.length === 0) {
+        playerReset();
+        return;
       }
 
-      updateScore();
+      // 消去列を一時的に白く（発光）変更
+      isAnimating = true;
+      fullRows.forEach(y => {
+        arena[y].fill(8);
+      });
+      playClearSound();
+
+      // 150ミリ秒後に実際にラインを消去
+      setTimeout(() => {
+        let rowCount = 1;
+        outer: for (let y = arena.length - 1; y >= 0; --y) {
+          for (let x = 0; x < arena[y].length; ++x) {
+            if (arena[y][x] === 0) {
+              continue outer;
+            }
+          }
+          const row = arena.splice(y, 1)[0].fill(0);
+          arena.unshift(row);
+          ++y;
+
+          player.score += rowCount * 10;
+          rowCount *= 2;
+        }
+
+        updateScore();
+        isAnimating = false;
+        playerReset();
+      }, 150);
     }
 
     function playerDrop() {
+      if (isAnimating) return;
       player.pos.y++;
       if (collide(arena, player)) {
         player.pos.y--;
         merge(arena, player);
-        playerReset();
+        player.matrix = null; // 落下中ブロックを一旦非表示
         arenaSweep();
       }
       dropCounter = 0;
     }
 
     function playerHardDrop() {
+      if (isAnimating) return;
       while (!collide(arena, player)) {
         player.pos.y++;
       }
       player.pos.y--;
       merge(arena, player);
-      playerReset();
+      player.matrix = null;
       arenaSweep();
       dropCounter = 0;
     }
 
     function playerMove(dir) {
+      if (isAnimating || !player.matrix) return;
       player.pos.x += dir;
       if (collide(arena, player)) {
         player.pos.x -= dir;
@@ -322,6 +346,7 @@
     }
 
     function playerRotate(dir) {
+      if (isAnimating || !player.matrix) return;
       const pos = player.pos.x;
       let offset = 1;
       rotate(player.matrix, dir);
@@ -382,14 +407,13 @@
       requestAnimationFrame(update);
     }
 
-    // タップ・クリック操作
     function handlePointer(event) {
       event.preventDefault();
-      initAudio(); // ユーザー操作イベント内で音声無効化を解除
+      initAudio();
+      if (isAnimating || !player.matrix) return;
 
       const rect = canvas.getBoundingClientRect();
       const clientX = event.touches ? event.touches[0].clientX : event.clientX;
-      const clientY = event.touches ? event.touches[0].clientY : event.clientY;
 
       const touchX = (clientX - rect.left) / rect.width * 12;
 
@@ -421,9 +445,9 @@
     canvas.addEventListener('touchstart', handlePointer, { passive: false });
     canvas.addEventListener('mousedown', handlePointer);
 
-    // キーボード操作
     document.addEventListener('keydown', event => {
-      initAudio(); // キー入力でも音声コンテキストを初期化
+      initAudio();
+      if (isAnimating) return;
       if (event.keyCode === 37) {
         playerMove(-1);
       } else if (event.keyCode === 39) {
