@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>JS テトリス (消去エフェクト付き)</title>
+  <title>JS テトリス (スピードモード対応)</title>
   <style>
     * {
       touch-action: manipulation;
@@ -19,13 +19,18 @@
       padding-top: 10px;
       overflow: hidden;
     }
-    .sound-control {
+    .controls {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 10px;
+      gap: 20px;
       margin-bottom: 10px;
       font-size: 14px;
+    }
+    .sound-control, .speed-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
     }
     .switch {
       position: relative;
@@ -65,13 +70,19 @@
     }
     #score {
       font-size: 24px;
+      font-weight: bold;
+    }
+    #level {
+      font-size: 16px;
+      color: #0DC2FF;
+      margin-top: 4px;
       margin-bottom: 10px;
     }
     canvas {
       border: solid 2px #fff;
       background-color: #000;
       max-width: 90vw;
-      max-height: 65vh;
+      max-height: 60vh;
       width: auto;
       height: auto;
       touch-action: none;
@@ -87,15 +98,26 @@
 </head>
 <body>
 
-  <div class="sound-control">
-    <span>SOUND</span>
-    <label class="switch">
-      <input type="checkbox" id="soundToggle" checked>
-      <span class="slider"></span>
-    </label>
+  <!-- 設定トグルスイッチ群 -->
+  <div class="controls">
+    <div class="sound-control">
+      <span>SOUND</span>
+      <label class="switch">
+        <input type="checkbox" id="soundToggle" checked>
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="speed-control">
+      <span>SPEED</span>
+      <label class="switch">
+        <input type="checkbox" id="speedToggle">
+        <span class="slider"></span>
+      </label>
+    </div>
   </div>
 
   <div id="score">SCORE: 0</div>
+  <div id="level">LEVEL: 1 (NORMAL)</div>
   <canvas id="tetris" width="240" height="400"></canvas>
   <div id="instructions">
     【タップ操作】<br>
@@ -151,7 +173,7 @@
       null,
       '#FF0D72', '#0DC2FF', '#0DFF72',
       '#F538FF', '#FF8E0D', '#FFE138', '#3877FF',
-      '#FFFFFF' // 8: 発光用（白）
+      '#FFFFFF' // 8: 発光用
     ];
 
     function createPiece(type) {
@@ -214,9 +236,10 @@
       pos: {x: 0, y: 0},
       matrix: null,
       score: 0,
+      level: 1,
     };
 
-    let isAnimating = false; // エフェクト演出中フラグ
+    let isAnimating = false;
 
     function collide(arena, player) {
       const [m, o] = [player.matrix, player.pos];
@@ -262,7 +285,6 @@
       });
     }
 
-    // ライン消去判定 & 光るフラッシュアニメーション処理
     function arenaSweep() {
       const fullRows = [];
       for (let y = arena.length - 1; y >= 0; --y) {
@@ -283,14 +305,12 @@
         return;
       }
 
-      // 消去列を一時的に白く（発光）変更
       isAnimating = true;
       fullRows.forEach(y => {
         arena[y].fill(8);
       });
       playClearSound();
 
-      // 150ミリ秒後に実際にラインを消去
       setTimeout(() => {
         let rowCount = 1;
         outer: for (let y = arena.length - 1; y >= 0; --y) {
@@ -307,7 +327,7 @@
           rowCount *= 2;
         }
 
-        updateScore();
+        updateStats();
         isAnimating = false;
         playerReset();
       }, 150);
@@ -319,7 +339,7 @@
       if (collide(arena, player)) {
         player.pos.y--;
         merge(arena, player);
-        player.matrix = null; // 落下中ブロックを一旦非表示
+        player.matrix = null;
         arenaSweep();
       }
       dropCounter = 0;
@@ -382,13 +402,33 @@
       if (collide(arena, player)) {
         arena.forEach(row => row.fill(0));
         player.score = 0;
-        updateScore();
+        updateStats();
       }
     }
 
-    function updateScore() {
+    // スコア・レベル・スピード間隔の更新
+    function updateStats() {
+      const speedToggle = document.getElementById('speedToggle');
+      
+      if (speedToggle.checked) {
+        // 50点ごとに1レベル上昇 (最大レベル10)
+        player.level = Math.min(10, Math.floor(player.score / 50) + 1);
+        // レベル1: 1000ms 〜 レベル10: 100ms（段階的に100msずつ短縮）
+        dropInterval = 1000 - (player.level - 1) * 100;
+        document.getElementById('level').innerText = 'LEVEL: ' + player.level;
+      } else {
+        player.level = 1;
+        dropInterval = 1000; // NORMALスピード
+        document.getElementById('level').innerText = 'LEVEL: 1 (NORMAL)';
+      }
+
       document.getElementById('score').innerText = 'SCORE: ' + player.score;
     }
+
+    // スピード切り替えスイッチの変更イベントリスナー
+    document.getElementById('speedToggle').addEventListener('change', () => {
+      updateStats();
+    });
 
     let dropCounter = 0;
     let dropInterval = 1000;
@@ -463,7 +503,7 @@
     });
 
     playerReset();
-    updateScore();
+    updateStats();
     update();
   </script>
 </body>
