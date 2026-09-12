@@ -3,21 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>JS テトリス (スマホ対応)</title>
-<!-- Google tag (gtag.js) -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-48LJRZLMML"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-
-  gtag('config', 'G-48LJRZLMML');
-</script>
-
+  <title>JS テトリス (音・スマホ対応)</title>
   <style>
     * {
-      touch-action: manipulation; /* スマホでのダブルタップ拡大防止 */
-      user-select: none;          /* 長押しでのテキスト選択防止 */
+      touch-action: manipulation;
+      user-select: none;
       -webkit-user-select: none;
     }
     body {
@@ -27,7 +17,52 @@
       text-align: center;
       margin: 0;
       padding-top: 10px;
-      overflow: hidden; /* 画面の不要なスクロールを防ぐ */
+      overflow: hidden;
+    }
+    /* 音声トグルスイッチのスタイル */
+    .sound-control {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 14px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #555;
+      transition: .3s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #0DC2FF;
+    }
+    input:checked + .slider:before {
+      transform: translateX(20px);
     }
     #score {
       font-size: 24px;
@@ -37,10 +72,10 @@
       border: solid 2px #fff;
       background-color: #000;
       max-width: 90vw;
-      max-height: 70vh;
+      max-height: 65vh;
       width: auto;
       height: auto;
-      touch-action: none; /* スマホでのスワイプによるスクロール防止 */
+      touch-action: none;
     }
     #instructions {
       margin-top: 10px;
@@ -52,6 +87,15 @@
   </style>
 </head>
 <body>
+
+  <!-- 音声トグルスイッチ -->
+  <div class="sound-control">
+    <span>SOUND</span>
+    <label class="switch">
+      <input type="checkbox" id="soundToggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
 
   <div id="score">SCORE: 0</div>
   <canvas id="tetris" width="240" height="400"></canvas>
@@ -65,9 +109,51 @@
   <script>
     const canvas = document.getElementById('tetris');
     const context = canvas.getContext('2d');
-    context.scale(20, 20); // 1ブロックを20pxとして計算 (12x20列)
+    context.scale(20, 20);
 
-    // テトリミノ（ブロック）の形状定義
+    // Web Audio API の初期化
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    let audioCtx = null;
+
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new AudioContext();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    // ブロック消去時の効果音再生（ファミコン風ピコピコ音）
+    function playClearSound() {
+      const soundToggle = document.getElementById('soundToggle');
+      if (!soundToggle.checked) return; // スイッチがOFFなら鳴らさない
+
+      initAudio();
+      if (!audioCtx) return;
+
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+
+      osc.type = 'square'; // 矩形波（レトロゲーム風の音）
+      
+      // 高音の短いサウンド (880Hz -> 1760Hz)
+      const now = audioCtx.currentTime;
+      osc.frequency.setValueAtTime(880, now);
+      osc.frequency.exponentialRampToValueAtTime(1760, now + 0.1);
+
+      // フェードアウト処理
+      gain.gain.setValueAtTime(0.15, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
+    }
+
+    // テトリミノの形状定義
     const PIECES = 'TJLOSZI';
     const COLORS = [
       null,
@@ -121,7 +207,6 @@
       }
     }
 
-    // 12x20のステージ（フィールド）を作成
     function createMatrix(w, h) {
       const matrix = [];
       while (h--) {
@@ -138,7 +223,6 @@
       score: 0,
     };
 
-    // 衝突判定
     function collide(arena, player) {
       const [m, o] = [player.matrix, player.pos];
       for (let y = 0; y < m.length; ++y) {
@@ -152,7 +236,6 @@
       return false;
     }
 
-    // 固定されたブロックとプレイヤーブロックを描画
     function draw() {
       context.fillStyle = '#000';
       context.fillRect(0, 0, canvas.width, canvas.height);
@@ -172,7 +255,6 @@
       });
     }
 
-    // 固定処理
     function merge(arena, player) {
       player.matrix.forEach((row, y) => {
         row.forEach((value, x) => {
@@ -186,6 +268,7 @@
     // ライン消去判定
     function arenaSweep() {
       let rowCount = 1;
+      let cleared = false;
       outer: for (let y = arena.length - 1; y >= 0; --y) {
         for (let x = 0; x < arena[y].length; ++x) {
           if (arena[y][x] === 0) {
@@ -198,11 +281,17 @@
 
         player.score += rowCount * 10;
         rowCount *= 2;
+        cleared = true;
       }
+
+      // ラインが1個以上消えたら効果音を鳴らす
+      if (cleared) {
+        playClearSound();
+      }
+
       updateScore();
     }
 
-    // 通常落下処理
     function playerDrop() {
       player.pos.y++;
       if (collide(arena, player)) {
@@ -214,7 +303,6 @@
       dropCounter = 0;
     }
 
-    // ハードドロップ処理
     function playerHardDrop() {
       while (!collide(arena, player)) {
         player.pos.y++;
@@ -226,7 +314,6 @@
       dropCounter = 0;
     }
 
-    // 移動処理
     function playerMove(dir) {
       player.pos.x += dir;
       if (collide(arena, player)) {
@@ -234,7 +321,6 @@
       }
     }
 
-    // 回転処理
     function playerRotate(dir) {
       const pos = player.pos.x;
       let offset = 1;
@@ -263,7 +349,6 @@
       }
     }
 
-    // 新しいブロックの生成 & ゲームオーバー判定
     function playerReset() {
       player.matrix = createPiece(PIECES[PIECES.length * Math.random() | 0]);
       player.pos.y = 0;
@@ -284,7 +369,6 @@
     let dropInterval = 1000;
     let lastTime = 0;
 
-    // ゲームループ
     function update(time = 0) {
       const deltaTime = time - lastTime;
       lastTime = time;
@@ -298,19 +382,17 @@
       requestAnimationFrame(update);
     }
 
-    // 画面タップ・クリックの判定処理
+    // タップ・クリック操作
     function handlePointer(event) {
       event.preventDefault();
+      initAudio(); // ユーザー操作イベント内で音声無効化を解除
 
       const rect = canvas.getBoundingClientRect();
       const clientX = event.touches ? event.touches[0].clientX : event.clientX;
       const clientY = event.touches ? event.touches[0].clientY : event.clientY;
 
-      // キャンバス上の座標を取得 (0 〜 12 / 0 〜 20)
       const touchX = (clientX - rect.left) / rect.width * 12;
-      const touchY = (clientY - rect.top) / rect.height * 20;
 
-      // 現在のブロックの範囲（左端と右端の列）を特定
       const matrix = player.matrix;
       let minX = matrix[0].length;
       let maxX = -1;
@@ -327,34 +409,30 @@
       const pieceLeft = player.pos.x + minX;
       const pieceRight = player.pos.x + maxX + 1;
 
-      // タップ位置に応じた操作
       if (touchX >= pieceLeft && touchX <= pieceRight) {
-        // ブロック上をタップ: 回転
         playerRotate(1);
       } else if (touchX < pieceLeft) {
-        // ブロックより左側をタップ: 左移動
         playerMove(-1);
       } else if (touchX > pieceRight) {
-        // ブロックより右側をタップ: 右移動
         playerMove(1);
       }
     }
 
-    // タッチおよびマウスクリックのイベントを登録
     canvas.addEventListener('touchstart', handlePointer, { passive: false });
     canvas.addEventListener('mousedown', handlePointer);
 
-    // PCキーボード操作設定
+    // キーボード操作
     document.addEventListener('keydown', event => {
-      if (event.keyCode === 37) {        // 左キー
+      initAudio(); // キー入力でも音声コンテキストを初期化
+      if (event.keyCode === 37) {
         playerMove(-1);
-      } else if (event.keyCode === 39) { // 右キー
+      } else if (event.keyCode === 39) {
         playerMove(1);
-      } else if (event.keyCode === 40) { // 下キー
+      } else if (event.keyCode === 40) {
         playerDrop();
-      } else if (event.keyCode === 38) { // 上キー
+      } else if (event.keyCode === 38) {
         playerRotate(1);
-      } else if (event.keyCode === 32) { // スペースキー
+      } else if (event.keyCode === 32) {
         event.preventDefault();
         playerHardDrop();
       }
