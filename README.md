@@ -1,10 +1,24 @@
 # 生成AIに作ってもらったテトリス風ゲーム
-リンク: [https://isamush.github.io/tetris/](https://isamush.github.io/tetris/)
+
+### ゲーム・ページ・リンク
+[https://isamush.github.io/tetris/](https://isamush.github.io/tetris/)
 
 <img src="GenTetris..png" width="300px">
 
 ### 説明
 生成AIにプロンプトを送り、Javascriptでテトリス風ゲームを作成してもらいました。
+
+### 機能
+- テトリス基本機能
+- スマホ対応
+- 破裂音
+- 落下速度の増加
+
+### 現在の開発期間
+4日　（合計８時間程度）
+
+### 開発要員
+１人　[作者HP](https://sites.google.com/site/isamush01)
 
 ### 使用 AI
 [Google Gemini](https://gemini.google.com/app?hl=ja)
