@@ -1,6 +1,7 @@
 # 生成AIに作ってもらったテトリス風ゲーム
 リンク: [https://isamush.github.io/tetris/](https://isamush.github.io/tetris/)
 
+![テトリス風のゲーム](GenTetris..png)
 ### 説明
 生成AIにプロンプトを送り、Javascriptでテトリス風ゲームを作成してもらいました。
 
